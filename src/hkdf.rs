@@ -1,5 +1,7 @@
 use hmac::Hmac;
 use clear_on_drop::clear;
+use clear_on_drop::clear_stack_on_return_fnonce;
+
 
 /// HKDF (HMAC-based Extract-and-Expand Key Derivation Function) as specified in the
 /// [RFC 5869](https://tools.ietf.org/html/rfc5869).

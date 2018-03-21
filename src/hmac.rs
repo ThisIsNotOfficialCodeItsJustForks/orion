@@ -1,7 +1,7 @@
-use std::borrow::Cow;
 use sha2::Digest;
 use sha2;
 use clear_on_drop::clear;
+use clear_on_drop::clear_stack_on_return_fnonce;
 use util;
 
 
@@ -93,32 +93,30 @@ impl Hmac {
     }
 
     /// Return a padded key if the key is less than or greater than the blocksize.
-    fn pad_key<'a>(&self, secret_key: &'a [u8]) -> Cow<'a, [u8]> {
-        let mut key = Cow::from(secret_key);
+    fn pad_key(&self, secret_key: &[u8]) -> Vec<u8> {
+        let mut padded_secret_key = clear_stack_on_return_fnonce(1, || secret_key.to_vec());
 
-        if key.len() > self.blocksize() {
-            key = self.hash(&key).into();
+        if padded_secret_key.len() > self.blocksize() {
+            padded_secret_key = self.hash(&padded_secret_key);
         }
-        if key.len() < self.blocksize() {
-            let mut resized_key = key.into_owned();
-            resized_key.resize(self.blocksize(), 0x00);
-            key = resized_key.into();
+        if padded_secret_key.len() < self.blocksize() {
+            padded_secret_key.resize(self.blocksize(), 0x00);
         }
-        key
+        padded_secret_key
     }
 
     /// Returns HMAC from a given key and message.
     pub fn hmac_compute(&self) -> Vec<u8> {
-        let key = self.pad_key(&self.secret_key);
+        let key = clear_stack_on_return_fnonce(1, || self.pad_key(&self.secret_key));
 
         let make_padded_key = |byte: u8| {
-            let mut pad = key.to_vec();
+            let mut pad = clear_stack_on_return_fnonce(1, || key.to_vec());
             for i in &mut pad { *i ^= byte };
             pad
         };
 
-        let mut ipad = make_padded_key(0x36);
-        let mut opad = make_padded_key(0x5C);
+        let mut ipad = clear_stack_on_return_fnonce(1, || make_padded_key(0x36));
+        let mut opad = clear_stack_on_return_fnonce(1, || make_padded_key(0x5C));
 
         ipad.extend_from_slice(&self.message);
         opad.extend_from_slice(self.hash(&ipad).as_ref());
@@ -130,7 +128,7 @@ impl Hmac {
     pub fn hmac_validate(&self, received_hmac: &[u8]) -> bool {
 
         let own_hmac = self.hmac_compute();
-        let rand_key = util::gen_rand_key(64);
+        let rand_key = clear_stack_on_return_fnonce(1, || util::gen_rand_key(64));
 
         let nd_round_own = Hmac {
             secret_key: rand_key.clone(),
